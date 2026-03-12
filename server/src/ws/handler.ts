@@ -31,7 +31,6 @@ function send(ws: WebSocket, event: ServerEvent): void {
 function broadcastGameState(roomId: string): void {
     const state = gameStore.get(roomId);
     if (!state) return;
-
     for (const [playerId] of state.players) {
         const ws = playerSockets.get(playerId);
         if (ws && ws.readyState === WebSocket.OPEN) {
@@ -105,10 +104,10 @@ export function handleConnection(ws: WebSocket, token?: string): void {
                         player.connected = false;
                         if (player.isHost) {
                             const newHost = Array.from(state.players.values()).find(p => !p.isHost);
-                            player.isHost = false;
                             if (newHost) {
                                 newHost.isHost = true;
                             }
+                            player.isHost = false;
                         }
                         broadcastGameState(meta.roomId);
                     }
@@ -261,6 +260,7 @@ function handleReconnect(ws: WebSocket, playerId: string, roomId: string): void 
     }
 
     player.connected = true;
+    player.isHost = false;
     const meta = socketMap.get(ws);
     if (meta) meta.roomId = normalizedRoomId;
 

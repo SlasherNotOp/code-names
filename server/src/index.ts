@@ -9,6 +9,8 @@ import url from 'url';
 import { handleConnection } from './ws/handler';
 import { generatePlayerId, signToken } from './auth/jwt';
 import { gameStore } from './game/state';
+import dotenv from 'dotenv';
+dotenv.config();
 
 const PORT = process.env.PORT || 3001;
 

@@ -260,7 +260,13 @@ function handleReconnect(ws: WebSocket, playerId: string, roomId: string): void 
     }
 
     player.connected = true;
-    player.isHost = false;
+
+    const players = state.players;
+    // if (players.keys.length > 1)
+    //     player.isHost = false;
+
+    players.keys.length > 1 ? player.isHost = false : '';
+
     const meta = socketMap.get(ws);
     if (meta) meta.roomId = normalizedRoomId;
 

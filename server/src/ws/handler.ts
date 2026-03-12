@@ -105,6 +105,7 @@ export function handleConnection(ws: WebSocket, token?: string): void {
                         player.connected = false;
                         if (player.isHost) {
                             const newHost = Array.from(state.players.values()).find(p => !p.isHost);
+                            player.isHost = false;
                             if (newHost) {
                                 newHost.isHost = true;
                             }

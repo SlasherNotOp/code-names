@@ -1,0 +1,186 @@
+# 🔥 CipherGrid — Hard Challenge Tasks
+
+After a deep analysis of every source file in the project, here are **10 challenging tasks** ranked by difficulty. Each involves meaningful code changes across both the server and client.
+
+---
+
+## Task 1: Turn Timer with Auto-Pass ⏱️
+**Difficulty:** ★★★★☆ | **Files:** 6+ | **Full-stack**
+
+Add a configurable turn timer (e.g. 90 seconds for spymaster, 60 seconds for operative guessing). When the timer expires, the turn auto-passes to the other team.
+
+**What to change:**
+- **Server** — [types.ts](file:///d:/codenames/client/lib/types.ts): add `turnTimer`, `turnStartedAt` to [GameState](file:///d:/codenames/server/src/game/types.ts#33-50) and [ClientGameState](file:///d:/codenames/server/src/game/types.ts#66-80)
+- **Server** — [engine.ts](file:///d:/codenames/server/src/game/engine.ts): start timer on turn switch, handle expiry via `setInterval` or per-action checks
+- **Server** — [handler.ts](file:///d:/codenames/server/src/ws/handler.ts): broadcast `TIMER_TICK` or `TIMER_EXPIRED` events; auto-call [switchTurn()](file:///d:/codenames/server/src/game/engine.ts#285-300) on expiry
+- **Client** — New `Timer.tsx` component: circular countdown animation with Framer Motion
+- **Client** — [TeamBar.tsx](file:///d:/codenames/client/components/TeamBar.tsx) / game page: integrate the timer display
+- **Client** — [types.ts](file:///d:/codenames/client/lib/types.ts): add timer-related fields to state types
+
+**Why it's hard:** Requires server-side interval management per room, syncing timer state across clients, handling edge cases (timer expire during flip, disconnect/reconnect with timer), and cleaning up intervals on room deletion.
+
+---
+
+## Task 2: "Play Again" — Server-Side Rematch System 🔄
+**Difficulty:** ★★★★☆ | **Files:** 5+ | **Full-stack**
+
+Currently "Play Again" just redirects to lobby (`/`). Implement a real rematch system where players can vote to replay in the same room with a fresh board, swapping team sides.
+
+**What to change:**
+- **Server** — [types.ts](file:///d:/codenames/client/lib/types.ts): add `VOTE_REMATCH` client event, `REMATCH_VOTES` server event
+- **Server** — [engine.ts](file:///d:/codenames/server/src/game/engine.ts): new `resetGame()` function that clears the board, swaps starting team, resets phase to `lobby`
+- **Server** — [handler.ts](file:///d:/codenames/server/src/ws/handler.ts): `handleVoteRematch()` — track votes, when all vote yes → `resetGame()` and broadcast
+- **Client** — [GameOver.tsx](file:///d:/codenames/client/components/GameOver.tsx): replace redirect with "Vote Rematch" button showing vote count (e.g., "3/4 voted")
+- **Client** — game page: handle `REMATCH_VOTES` event to update UI
+
+**Why it's hard:** Requires vote tracking per player, handling disconnected voters, resetting game state without destroying the room/socket connections, and keeping players connected through the transition.
+
+---
+
+## Task 3: In-Game Team Chat 💬
+**Difficulty:** ★★★★☆ | **Files:** 6+ | **Full-stack**
+
+Add a real-time team-only chat alongside the Action Log. Spymasters of the same team should NOT share a chat channel (to prevent cheating). Operatives can chat within their team.
+
+**What to change:**
+- **Server** — [types.ts](file:///d:/codenames/client/lib/types.ts): add `CHAT_MESSAGE` client event, `CHAT_BROADCAST` server event, `ChatMessage` interface
+- **Server** — [handler.ts](file:///d:/codenames/server/src/ws/handler.ts): `handleChatMessage()` — validate sender, only broadcast to teammates (excluding other team's spymaster from seeing)
+- **Server** — [engine.ts](file:///d:/codenames/server/src/game/engine.ts) or new `chat.ts` module: chat history storage per room
+- **Client** — New `TeamChat.tsx` component with message input, scroll-to-bottom, team-colored messages
+- **Client** — [types.ts](file:///d:/codenames/client/lib/types.ts): add chat types
+- **Client** — game page: integrate chat alongside or tabbed with ActionLog
+
+**Why it's hard:** Information security is critical—must ensure spymasters can't leak information. Need to handle the chat vs role permissions matrix carefully, persist chat history within the game session, and handle reconnection (should see previous messages).
+
+---
+
+## Task 4: Custom Word Packs 📦
+**Difficulty:** ★★★☆☆ | **Files:** 5+ | **Full-stack**
+
+Let the room creator select from multiple word packs (Classic, Movies, Science, Food, etc.) or create a custom word pack before the game starts.
+
+**What to change:**
+- **Server** — [data/words.ts](file:///d:/codenames/server/src/data/words.ts): restructure into a `Map<string, string[]>` of named word packs
+- **Server** — [types.ts](file:///d:/codenames/client/lib/types.ts): add `wordPack` field to [GameState](file:///d:/codenames/server/src/game/types.ts#33-50), `SET_WORD_PACK` client event
+- **Server** — [engine.ts](file:///d:/codenames/server/src/game/engine.ts): [generateBoard()](file:///d:/codenames/server/src/game/engine.ts#18-43) accepts word pack parameter, validate pack has ≥25 words
+- **Server** — [handler.ts](file:///d:/codenames/server/src/ws/handler.ts): `handleSetWordPack()` — only room creator can set, only during lobby
+- **Client** — Lobby game page: word pack selector dropdown/cards with preview
+- **Client** — New `WordPackSelector.tsx` component
+
+**Why it's hard:** Needs "room creator" permissions concept (currently no admin/host concept exists), validation that custom packs have enough unique words, and clean UX for pack selection.
+
+---
+
+## Task 5: Spectator Mode 👀
+**Difficulty:** ★★★★★ | **Files:** 6+ | **Full-stack**
+
+Allow players to join as spectators who can watch the game without being on a team. Spectators see the operative view (hidden cards) and cannot interact with the game board.
+
+**What to change:**
+- **Server** — [types.ts](file:///d:/codenames/client/lib/types.ts): add `'spectator'` to roles, update [PlayerRole](file:///d:/codenames/server/src/game/types.ts#7-8) union
+- **Server** — [engine.ts](file:///d:/codenames/server/src/game/engine.ts): [getFilteredState()](file:///d:/codenames/server/src/game/engine.ts#331-374) must filter spectators correctly (operative-like view), [startGame()](file:///d:/codenames/server/src/game/engine.ts#80-115) should ignore spectators for team validation, [checkAllReady()](file:///d:/codenames/server/src/game/engine.ts#322-330) should skip spectators
+- **Server** — [handler.ts](file:///d:/codenames/server/src/ws/handler.ts): allow joining without team selection, handle spectator-specific logic
+- **Client** — Lobby: add "Watch as Spectator" option alongside team/role selection
+- **Client** — Game page: show spectator badge, disable all interactions, show spectator count
+- **Client** — [TeamBar.tsx](file:///d:/codenames/client/components/TeamBar.tsx): display spectator list separately
+
+**Why it's hard:** Touches nearly every validation path. Must ensure spectators can't accidentally be counted for ready checks, team balance, or game start requirements. [getFilteredState](file:///d:/codenames/server/src/game/engine.ts#331-374) must be carefully extended. Spectators should gracefully transition if they want to join mid-game (or be blocked).
+
+---
+
+## Task 6: Replace `flipLock` with Proper Async Mutex 🔒
+**Difficulty:** ★★★★☆ | **Files:** 3 | **Server-only**
+
+The current `flipLock` boolean in [engine.ts](file:///d:/codenames/server/src/game/engine.ts) is a naive concurrency guard that doesn't actually work for async/concurrent scenarios (Node.js event loop). Replace it with a proper per-room async mutex or semaphore.
+
+**What to change:**
+- **Server** — [state.ts](file:///d:/codenames/server/src/game/state.ts): add a per-room `AsyncMutex` (use `async-mutex` package or implement one)
+- **Server** — [engine.ts](file:///d:/codenames/server/src/game/engine.ts): remove `flipLock` boolean, accept mutex in [flipCard()](file:///d:/codenames/server/src/game/engine.ts#166-261) or wrap calls externally
+- **Server** — [handler.ts](file:///d:/codenames/server/src/ws/handler.ts): acquire mutex before calling [flipCard()](file:///d:/codenames/server/src/game/engine.ts#166-261), release after broadcast
+- **Server** — [types.ts](file:///d:/codenames/client/lib/types.ts): remove `flipLock` from [GameState](file:///d:/codenames/server/src/game/types.ts#33-50)
+
+**Why it's hard:** Requires understanding of Node.js event loop concurrency, async mutexes, and ensuring the lock is properly released in all error paths. Must not introduce deadlocks. Need to verify that multiple rapid clicks from different clients are properly serialized.
+
+---
+
+## Task 7: Persistent Match History with SQLite 📊
+**Difficulty:** ★★★★★ | **Files:** 8+ | **Full-stack**
+
+The [info.md](file:///d:/codenames/info.md) specifies Prisma + PostgreSQL for match history, but nothing is implemented. Add SQLite (simpler for dev) match history: record every completed game with winner, duration, teams, clue history.
+
+**What to change:**
+- **Server** — New `prisma/schema.prisma` or raw SQLite setup with a `matches` table
+- **Server** — New `db/` module: `saveMatch()`, `getMatchHistory()`, `getPlayerStats()`
+- **Server** — [handler.ts](file:///d:/codenames/server/src/ws/handler.ts) / [engine.ts](file:///d:/codenames/server/src/game/engine.ts): on game end, persist match data
+- **Server** — [index.ts](file:///d:/codenames/server/src/index.ts): new REST endpoints (`GET /matches`, `GET /players/:id/stats`)
+- **Client** — New `/history` page showing past matches in a table with filters
+- **Client** — Lobby page: link to match history, show player's win/loss record
+
+**Why it's hard:** Requires database schema design, data migration setup, mapping in-memory game state to persistent records, and building a full new page. Must handle the "anonymous player" identity model (JWT-based IDs) for stat tracking.
+
+---
+
+## Task 8: Kick Player & Room Admin System 👑
+**Difficulty:** ★★★☆☆ | **Files:** 5+ | **Full-stack**
+
+Add a "room host" concept. The player who created the room becomes the host (shown with a 👑 crown). The host can kick players during the lobby phase.
+
+**What to change:**
+- **Server** — [types.ts](file:///d:/codenames/client/lib/types.ts): add `hostId` to [GameState](file:///d:/codenames/server/src/game/types.ts#33-50), `KICK_PLAYER` client event, `PLAYER_KICKED` server event
+- **Server** — [engine.ts](file:///d:/codenames/server/src/game/engine.ts): add `hostId` to [createGameState()](file:///d:/codenames/server/src/game/engine.ts#56-79), include in [ClientGameState](file:///d:/codenames/server/src/game/types.ts#66-80)
+- **Server** — [handler.ts](file:///d:/codenames/server/src/ws/handler.ts): `handleKickPlayer()` — validate caller is host, remove player, close their socket, broadcast
+- **Client** — Lobby: show crown icon next to host, show "Kick" button next to each non-host player (only visible to host)
+- **Client** — Handle `PLAYER_KICKED` event — kicked player gets redirected to homepage with a toast
+
+**Why it's hard:** Needs to handle host disconnect (transfer host to next player), prevent mid-game kicks, and gracefully handle the kicked player's socket cleanup and UI redirect.
+
+---
+
+## Task 9: Sound Effects & Audio Feedback 🔊
+**Difficulty:** ★★★☆☆ | **Files:** 4+ | **Client-only**
+
+Add immersive sound effects: card flip sound, clue given chime, turn change alert, assassin hit dramatic sound, game win fanfare. Include a mute toggle.
+
+**What to change:**
+- **Client** — New `lib/audio.ts`: AudioManager class using Web Audio API, preloads sounds, handles mute state
+- **Client** — New `components/SoundToggle.tsx`: mute/unmute button in header
+- **Client** — Game page: trigger sounds on `GAME_STATE` changes (detect what changed)
+- **Client** — Generate or add sound assets (`/public/sounds/`)
+- **Client** — [globals.css](file:///d:/codenames/client/app/globals.css) / header: integrate toggle button
+
+**Why it's hard:** Detecting *what changed* between game states (was a card just flipped? was a clue given?) requires diffing previous and current state. Browser autoplay policies block audio without user interaction, so need a user gesture before enabling. Audio preloading and memory management matters on mobile.
+
+---
+
+## Task 10: Clue History Panel with Filter & Search 🔍
+**Difficulty:** ★★★☆☆ | **Files:** 4+ | **Client-focused**
+
+The current [ActionLog](file:///d:/codenames/client/components/ActionLog.tsx#32-82) is a raw event stream. Build a dedicated Clue History panel that shows only clues given, organized by team and turn, with search/filter. Clicking a clue highlights the cards it was associated with (the cards that were flipped during that clue's turn).
+
+**What to change:**
+- **Server** — [types.ts](file:///d:/codenames/client/lib/types.ts): add `clueId` to each card flip action log entry, linking flips to their parent clue
+- **Server** — [engine.ts](file:///d:/codenames/server/src/game/engine.ts): generate `clueId` when a clue is given, attach it to subsequent flip logs until turn changes
+- **Client** — New `ClueHistory.tsx` component: filterable, searchable, grouped by turn/team
+- **Client** — [Board.tsx](file:///d:/codenames/client/components/Board.tsx) / [Card.tsx](file:///d:/codenames/client/components/Card.tsx): accept `highlightedCards` prop to glow cards associated with a selected clue
+- **Client** — Game page: integrate panel, manage highlighted state
+
+**Why it's hard:** Requires linking the action log entries to clue contexts (which flips belong to which clue), state management for highlighting across components, and building a polished search/filter UX.
+
+---
+
+## Quick Reference
+
+| # | Task | Difficulty | Scope | Key Challenge |
+|---|------|-----------|-------|---------------|
+| 1 | Turn Timer | ★★★★☆ | Full-stack | Server intervals + sync across clients |
+| 2 | Rematch System | ★★★★☆ | Full-stack | Vote tracking + state reset without disconnecting |
+| 3 | Team Chat | ★★★★☆ | Full-stack | Information security per role |
+| 4 | Custom Word Packs | ★★★☆☆ | Full-stack | Room admin concept + validation |
+| 5 | Spectator Mode | ★★★★★ | Full-stack | Touches every validation path |
+| 6 | Async Mutex | ★★★★☆ | Server | Proper concurrency without deadlocks |
+| 7 | Match History DB | ★★★★★ | Full-stack | Database setup + new REST endpoints + new page |
+| 8 | Kick Player / Host | ★★★☆☆ | Full-stack | Host transfer + socket cleanup |
+| 9 | Sound Effects | ★★★☆☆ | Client | State diffing + browser autoplay policy |
+| 10 | Clue History Panel | ★★★☆☆ | Client | Linking log entries + cross-component highlighting |
+
+> Pick any task and I'll build it out for you with full implementation! 🚀

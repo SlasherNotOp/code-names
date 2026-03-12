@@ -26,7 +26,7 @@ export interface PlayerInfo {
     team?: TeamColor;
     role?: PlayerRole;
     connected: boolean;
-    ready: boolean;
+    // ready: boolean;
     isHost: boolean;
 
 }

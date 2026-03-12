@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Copy, Check, ArrowLeft, Users, Eye, Shield,
-    SkipForward, Play, Crown, CheckCircle, Circle
+    SkipForward, Play, Crown, CheckCircle, Circle, UserMinus
 } from 'lucide-react';
 import { socketClient } from '@/lib/socket';
 import { getIdentity, setStoredRoom, clearStoredRoom } from '@/lib/identity';
@@ -15,6 +15,7 @@ import TeamBar from '@/components/TeamBar';
 import ClueInput from '@/components/ClueInput';
 import ActionLog from '@/components/ActionLog';
 import GameOver from '@/components/GameOver';
+import { div } from 'framer-motion/client';
 
 export default function GamePage() {
     const params = useParams();
@@ -26,7 +27,6 @@ export default function GamePage() {
     const [error, setError] = useState('');
     const [copied, setCopied] = useState(false);
     const [toast, setToast] = useState('');
-
     // Connect to room
     useEffect(() => {
         if (!roomId) return;
@@ -45,6 +45,20 @@ export default function GamePage() {
                     if (mounted) {
                         setGameState(data.state);
                         setConnected(true);
+                    }
+                });
+                socketClient.on('KICKED_PLAYER', (data: any) => {
+                    if (mounted) {
+                        setToast(data.playerName + "Player is Kicked");
+                        setTimeout(() => setToast(''), 3000);
+                    }
+                });
+                socketClient.on('YOU_KICKED', (data: any) => {
+                    if (mounted) {
+                        // console.log(data.playerName, 'mohit')
+                        clearStoredRoom();
+                        sessionStorage.setItem('lobby-error', 'You have been kicked from the room.');
+                        router.push('/');
                     }
                 });
 
@@ -97,8 +111,17 @@ export default function GamePage() {
         socketClient.send({ type: 'SELECT_ROLE', role });
     }, []);
 
-    const toggleReady = useCallback(() => {
-        socketClient.send({ type: 'TOGGLE_READY' });
+    // const toggleReady = useCallback(() => {
+    //     socketClient.send({ type: 'TOGGLE_READY' });
+    // }, []);
+    const startGame = useCallback(() => {
+        socketClient.send({ type: 'START_GAME' });
+    }, []);
+    const kickPlayer = useCallback((playerId: string) => {
+        socketClient.send({ type: 'KICK_PLAYER', playerId });
+    }, []);
+    const makeHost = useCallback((playerId: string) => {
+        socketClient.send({ type: 'MAKE_HOST', playerId });
     }, []);
 
     const giveClue = useCallback((word: string, count: number) => {
@@ -297,13 +320,13 @@ export default function GamePage() {
                         <div className="border-t border-border-subtle pt-4">
                             <p className="text-xs text-text-muted uppercase tracking-wider mb-2">
                                 Players ({gameState.players.length})
-                                <span className="ml-2 text-accent-gold">
+                                {/* <span className="ml-2 text-accent-gold">
                                     {gameState.players.filter(p => p.ready).length}/{gameState.players.length} Ready
-                                </span>
+                                </span> */}
                             </p>
                             <div className="space-y-1.5">
-                                {gameState.players.map(p => (
-                                    <div key={p.id} className="flex items-center gap-2 text-sm">
+                                {gameState.players.map((p, i) => (
+                                    <div key={p.id} className="group flex items-center p-2 gap-2 text-sm relative rounded-lg transition-all duration-300 hover:bg-gradient-to-r hover:from-slate-800 hover:to-slate-700 hover:z-50">
                                         <div className={`w-2 h-2 rounded-full ${p.team === 'red' ? 'bg-red-500' :
                                             p.team === 'blue' ? 'bg-blue-500' :
                                                 'bg-text-muted'
@@ -316,12 +339,39 @@ export default function GamePage() {
                                                 {p.role === 'spymaster' ? '👁 Spymaster' : '🛡 Operative'}
                                             </span>
                                         )}
-                                        <span className="ml-auto">
-                                            {p.ready
-                                                ? <CheckCircle className="w-4 h-4 text-green-400" />
-                                                : <Circle className="w-4 h-4 text-text-muted/40" />
-                                            }
-                                        </span>
+                                        {p.isHost && (
+                                            <span className="ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-accent-gold/20 text-accent-gold text-xs font-semibold">
+                                                <Crown className="w-3.5 h-3.5" />
+                                                Host
+                                            </span>
+                                        )}
+
+                                        {/* Hover Actions Popover */}
+                                        {you.isHost && p.id !== you.id && (
+                                            <div className="absolute top-[80%] right-8 pt-3 w-48 z-50 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-200 transform translate-y-2 group-hover:translate-y-0">
+                                                <div className="bg-[#121620] border border-white/10 rounded-xl shadow-[0_0_40px_rgba(0,0,0,0.5)] relative">
+                                                    {/* Up arrow */}
+                                                    <div className="absolute -top-1.5 right-6 w-3 h-3 bg-[#121620] border-t border-l border-white/10 rotate-45" />
+
+                                                    <div className="p-1.5 relative z-10 flex flex-col gap-0.5">
+                                                        <button
+                                                            onClick={() => { makeHost(p.id) }}
+                                                            className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-white hover:bg-white/5 rounded-lg transition-colors"
+                                                        >
+                                                            <Crown className="w-4 h-4" />
+                                                            Make Host
+                                                        </button>
+                                                        <button
+                                                            onClick={() => { kickPlayer(p.id) }}
+                                                            className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                                                        >
+                                                            <UserMinus className="w-4 h-4" />
+                                                            Kick Player
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                             </div>
@@ -331,33 +381,23 @@ export default function GamePage() {
                     {/* Ready / Not Ready Toggle */}
                     <motion.button
                         id="ready-btn"
-                        onClick={toggleReady}
+                        onClick={startGame}
                         className={`w-full font-display font-bold text-lg py-4 rounded-2xl
               transition-all duration-300 flex items-center justify-center gap-3
               disabled:opacity-40 disabled:cursor-not-allowed
-              ${you.ready
+              ${you.isHost
                                 ? 'bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white shadow-lg shadow-red-600/20 hover:shadow-red-600/40'
                                 : 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white shadow-lg shadow-green-600/20 hover:shadow-green-600/40'
                             }`}
-                        disabled={!you.team || !you.role}
+                        disabled={!you.isHost}
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
                     >
-                        {you.ready ? (
-                            <>
-                                <Circle className="w-5 h-5" />
-                                Not Ready
-                            </>
-                        ) : (
-                            <>
-                                <CheckCircle className="w-5 h-5" />
-                                Ready Up
-                            </>
-                        )}
+                        {you.isHost ? "Start Game" : "You are not the host"}
                     </motion.button>
 
                     {/* Ready status hint */}
-                    {you.ready && (
+                    {you.isHost && (
                         <motion.p
                             className="text-center text-xs text-text-muted mt-2"
                             initial={{ opacity: 0 }}

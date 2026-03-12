@@ -27,7 +27,7 @@ export interface Player {
     team?: TeamColor;
     role?: PlayerRole;
     connected: boolean;
-    ready: boolean;
+    // ready: boolean;
     isHost: boolean;
 }
 
@@ -85,7 +85,8 @@ export interface PlayerInfo {
     team?: TeamColor;
     role?: PlayerRole;
     connected: boolean;
-    ready: boolean;
+    isHost: boolean;
+    // ready: boolean;
 }
 
 // WebSocket Event Types
@@ -94,7 +95,9 @@ export type ClientEvent =
     | { type: 'JOIN_ROOM'; roomId: string; playerName: string }
     | { type: 'SELECT_TEAM'; team: TeamColor }
     | { type: 'SELECT_ROLE'; role: PlayerRole }
-    | { type: 'TOGGLE_READY' }
+    | { type: 'START_GAME' }
+    | { type: 'KICK_PLAYER'; hostId: string, playerId: string }
+    | { type: 'MAKE_HOST'; hostId: string, playerId: string }
     | { type: 'GIVE_CLUE'; word: string; count: number }
     | { type: 'FLIP_CARD'; cardIndex: number }
     | { type: 'PASS_TURN' }
@@ -106,6 +109,8 @@ export type ServerEvent =
     | { type: 'ERROR'; message: string }
     | { type: 'PLAYER_JOINED'; player: PlayerInfo }
     | { type: 'PLAYER_LEFT'; playerId: string }
+    | { type: 'KICKED_PLAYER'; playerName: string }
+    | { type: 'YOU_KICKED'; message: string }
     | { type: 'CARD_FLIPPED'; cardIndex: number; card: ClientCard; flipperName: string }
     | { type: 'CLUE_GIVEN'; clue: Clue }
     | { type: 'TURN_CHANGED'; team: TeamColor }

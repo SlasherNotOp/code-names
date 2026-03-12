@@ -3,7 +3,7 @@
 // ============================
 import WebSocket from 'ws';
 import { ClientEvent, Player, ServerEvent, ClientCard } from '../game/types';
-import { createGameState, generateRoomId, startGame, giveClue, flipCard, passTurn, getFilteredState, checkAllReady } from '../game/engine';
+import { createGameState, generateRoomId, startGame, giveClue, flipCard, passTurn, getFilteredState } from '../game/engine';
 import { gameStore } from '../game/state';
 import { verifyToken } from '../auth/jwt';
 
@@ -103,6 +103,12 @@ export function handleConnection(ws: WebSocket, token?: string): void {
                     const player = state.players.get(meta.playerId);
                     if (player) {
                         player.connected = false;
+                        if (player.isHost) {
+                            const newHost = Array.from(state.players.values()).find(p => !p.isHost);
+                            if (newHost) {
+                                newHost.isHost = true;
+                            }
+                        }
                         broadcastGameState(meta.roomId);
                     }
                 }
@@ -120,8 +126,14 @@ function handleEvent(ws: WebSocket, playerId: string, event: ClientEvent): void 
         case 'CREATE_ROOM':
             handleCreateRoom(ws, playerId, event.playerName);
             break;
-            // case 'START_GAME':
-            //     handleStartGame(ws, playerId);
+        case 'START_GAME':
+            handleStartGame(ws, playerId);
+            break;
+        case 'KICK_PLAYER':
+            handleKickPlayer(ws, playerId, event.playerId);
+            break;
+        case 'MAKE_HOST':
+            handleMakeHost(ws, playerId, event.playerId);
             break;
         case 'JOIN_ROOM':
             handleJoinRoom(ws, playerId, event.roomId, event.playerName);
@@ -132,9 +144,9 @@ function handleEvent(ws: WebSocket, playerId: string, event: ClientEvent): void 
         case 'SELECT_ROLE':
             handleSelectRole(ws, playerId, event.role);
             break;
-        case 'TOGGLE_READY':
-            handleToggleReady(ws, playerId);
-            break;
+        // case 'TOGGLE_READY':
+        //     handleToggleReady(ws, playerId);
+        //     break;
         case 'GIVE_CLUE':
             handleGiveClue(ws, playerId, event.word, event.count);
             break;
@@ -166,7 +178,7 @@ function handleCreateRoom(ws: WebSocket, playerId: string, playerName?: string):
         id: playerId,
         name,
         connected: true,
-        ready: false,
+        // ready: true,
         isHost: true,
     };
 
@@ -211,7 +223,7 @@ function handleJoinRoom(ws: WebSocket, playerId: string, roomId: string, playerN
             id: playerId,
             name,
             connected: true,
-            ready: false,
+            // ready: false,
             isHost: false,
         };
         state.players.set(playerId, player);
@@ -278,7 +290,7 @@ function handleSelectTeam(ws: WebSocket, playerId: string, team: string): void {
     }
 
     player.team = team;
-    player.ready = false; // Reset ready on team change
+    // player.ready = false; // Reset ready on team change
     broadcastGameState(meta.roomId);
 }
 
@@ -316,11 +328,11 @@ function handleSelectRole(ws: WebSocket, playerId: string, role: string): void {
     }
 
     player.role = role;
-    player.ready = false; // Reset ready on role change
+    // player.ready = false; // Reset ready on role change
     broadcastGameState(meta.roomId);
 }
 
-function handleToggleReady(ws: WebSocket, playerId: string): void {
+function handleStartGame(ws: WebSocket, playerId: string): void {
     const meta = socketMap.get(ws);
     if (!meta?.roomId) {
         send(ws, { type: 'ERROR', message: 'Not in a room' });
@@ -342,18 +354,129 @@ function handleToggleReady(ws: WebSocket, playerId: string): void {
         return;
     }
 
-    player.ready = !player.ready;
+    if (!player.isHost) {
+        send(ws, { type: 'ERROR', message: 'Only the host can start the game' });
+        return;
+    }
+    const result = startGame(state);
+    if (!result.success) {
+        send(ws, { type: 'ERROR', message: result.error! });
+        return;
+    }
+
     broadcastGameState(meta.roomId);
 
-    // Check if all players are ready → auto-start
-    if (checkAllReady(state)) {
-        const result = startGame(state);
-        if (result.success) {
-            console.log(`[Game] All players ready — game started in room ${meta.roomId}`);
-            broadcastGameState(meta.roomId);
-        }
-    }
 }
+
+function handleKickPlayer(ws: WebSocket, hostId: string, playerId: string): void {
+    const meta = socketMap.get(ws);
+    if (!meta?.roomId) {
+        send(ws, { type: 'ERROR', message: 'Not in a room' });
+        return;
+    }
+
+    const state = gameStore.get(meta.roomId);
+    if (!state) return;
+
+    const host = state.players.get(hostId);
+    if (!host) return;
+
+    const player = state.players.get(playerId);
+    if (!player) return;
+
+    if (!host.isHost) {
+        send(ws, { type: 'ERROR', message: 'Only the host can kick players' });
+        return;
+    }
+
+    if (hostId === playerId) {
+        send(ws, { type: 'ERROR', message: 'Cannot kick the host' });
+        return;
+    }
+
+
+    const kickedPlayer = state.players.get(playerId);
+    if (!kickedPlayer) {
+        send(ws, { type: 'ERROR', message: 'Cannot kick the host' });
+        return;
+    }
+
+    state.players.delete(playerId);
+
+    for (const [id, player] of state.players) {
+        const playerWs = playerSockets.get(id);
+        if (!playerWs) return;
+        const noob = '';
+        send(playerWs, { type: 'KICKED_PLAYER', playerName: kickedPlayer.name })
+    }
+    const kickedPlayerSocket = playerSockets.get(playerId);
+
+    if (kickedPlayerSocket) {
+        send(kickedPlayerSocket, { type: 'YOU_KICKED', message: 'You are Kicked from the Room' })
+    }
+
+    broadcastGameState(meta.roomId);
+}
+function handleMakeHost(ws: WebSocket, hostId: string, playerId: string): void {
+    const meta = socketMap.get(ws);
+    if (!meta?.roomId) {
+        send(ws, { type: 'ERROR', message: 'Not in a room' });
+        return;
+    }
+
+    const state = gameStore.get(meta.roomId);
+    if (!state) return;
+
+    const host = state.players.get(hostId);
+    if (!host) return;
+
+    const player = state.players.get(playerId);
+    if (!player) return;
+
+    if (!host.isHost) {
+        send(ws, { type: 'ERROR', message: 'Only the host can make other players host' });
+        return;
+    }
+
+    host.isHost = false;
+    player.isHost = true;
+    broadcastGameState(meta.roomId);
+}
+
+// function handleToggleReady(ws: WebSocket, playerId: string): void {
+//     const meta = socketMap.get(ws);
+//     if (!meta?.roomId) {
+//         send(ws, { type: 'ERROR', message: 'Not in a room' });
+//         return;
+//     }
+
+//     const state = gameStore.get(meta.roomId);
+//     if (!state) return;
+//     if (state.phase !== 'lobby') {
+//         send(ws, { type: 'ERROR', message: 'Game already started' });
+//         return;
+//     }
+
+//     const player = state.players.get(playerId);
+//     if (!player) return;
+
+//     if (!player.team || !player.role) {
+//         send(ws, { type: 'ERROR', message: 'Select a team and role before readying up' });
+//         return;
+//     }
+
+//     player.ready = !player.ready;
+//     broadcastGameState(meta.roomId);
+
+//     // Check if all players are ready → auto-start
+//     if (checkAllReady(state)) {
+//         const result = startGame(state);
+//         if (result.success) {
+//             console.log(`[Game] All players ready — game started in room ${meta.roomId}`);
+//             broadcastGameState(meta.roomId);
+//         }
+//     }
+// }
 
 function handleGiveClue(ws: WebSocket, playerId: string, word: string, count: number): void {
     const meta = socketMap.get(ws);

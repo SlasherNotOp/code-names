@@ -21,6 +21,11 @@ export default function LobbyPage() {
         if (stored) {
             setExistingRoom(stored);
         }
+        const kickMessage = sessionStorage.getItem('lobby-error');
+        if (kickMessage) {
+            setError(kickMessage);
+            sessionStorage.removeItem('lobby-error'); // Clear it right away
+        }
     }, []);
 
     async function handleCreate() {

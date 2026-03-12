@@ -315,18 +315,19 @@ function toPlayerInfo(player: Player): PlayerInfo {
         team: player.team,
         role: player.role,
         connected: player.connected,
-        ready: player.ready,
+        // ready: player.ready,
+        isHost: player.isHost,
     };
 }
 
 /**
  * Check if all players are ready to start (have team, role, and ready flag)
  */
-export function checkAllReady(state: GameState): boolean {
-    const players = Array.from(state.players.values());
-    if (players.length < 2) return false;
-    return players.every(p => p.team && p.role && p.ready);
-}
+// export function checkAllReady(state: GameState): boolean {
+//     const players = Array.from(state.players.values());
+//     if (players.length < 2) return false;
+//     return players.every(p => p.team && p.role && p.ready);
+// }
 
 /**
  * Get the game state filtered for a specific player.
@@ -353,7 +354,8 @@ export function getFilteredState(state: GameState, playerId: string): ClientGame
         id: playerId,
         name: 'Unknown',
         connected: false,
-        ready: false,
+        // ready: false,
+        isHost: false,
     };
 
     return {

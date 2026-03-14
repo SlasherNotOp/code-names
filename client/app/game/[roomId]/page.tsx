@@ -5,7 +5,8 @@ import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Copy, Check, ArrowLeft, Users, Eye, Shield,
-    SkipForward, Play, Crown, CheckCircle, Circle, UserMinus
+    SkipForward, Play, Crown, CheckCircle, Circle, UserMinus,
+    WifiOff
 } from 'lucide-react';
 import { socketClient } from '@/lib/socket';
 import { getIdentity, setStoredRoom, clearStoredRoom } from '@/lib/identity';
@@ -345,6 +346,11 @@ export default function GamePage() {
                                                 Host
                                             </span>
                                         )}
+                                        {
+                                            !p.connected && (
+                                                <WifiOff className="w-3.5 h-3.5" />
+                                            )
+                                        }
 
                                         {/* Hover Actions Popover */}
                                         {you.isHost && p.id !== you.id && (

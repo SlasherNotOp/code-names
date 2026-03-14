@@ -91,29 +91,38 @@ export function handleConnection(ws: WebSocket, token?: string): void {
     // Handle disconnect
     ws.on('close', () => {
         const meta = socketMap.get(ws);
-        if (meta) {
-            socketMap.delete(ws);
-            playerSockets.delete(meta.playerId);
+        if (meta?.roomId) {
+            const state = gameStore.get(meta.roomId);
+            if (state) {
+                const player = state.players.get(meta.playerId);
+                if (player) {
+                    player.connected = false;
+                    broadcastGameState(meta.roomId);
 
-            // Mark player as disconnected
-            if (meta.roomId) {
-                const state = gameStore.get(meta.roomId);
-                if (state) {
-                    const player = state.players.get(meta.playerId);
-                    if (player) {
-                        player.connected = false;
-                        if (player.isHost) {
-                            const newHost = Array.from(state.players.values()).find(p => !p.isHost);
-                            if (newHost) {
-                                newHost.isHost = true;
+                    // Give the player 15 seconds to reconnect before 
+                    // transferring host
+                    if (player.isHost) {
+                        setTimeout(() => {
+                            const freshState = gameStore.get(meta.roomId!);
+                            if (!freshState) return;
+                            const freshPlayer = freshState.players.get(meta.playerId);
+
+                            // Only transfer if they haven't reconnected
+                            if (freshPlayer && !freshPlayer.connected) {
+                                freshPlayer.isHost = false;
+                                const newHost = Array.from(freshState.players.values())
+                                    .find(p => p.connected && !p.isHost);
+                                if (newHost) {
+                                    newHost.isHost = true;
+                                }
+                                broadcastGameState(meta.roomId!);
                             }
-                            player.isHost = false;
-                        }
-                        broadcastGameState(meta.roomId);
+                        }, 15000); // 15 second grace period
                     }
                 }
             }
-            console.log(`[WS] Player disconnected: ${meta.playerId}`);
+            socketMap.delete(ws);
+            playerSockets.delete(meta.playerId);
         }
     });
 }
@@ -261,11 +270,11 @@ function handleReconnect(ws: WebSocket, playerId: string, roomId: string): void 
 
     player.connected = true;
 
-    const players = state.players;
-    // if (players.keys.length > 1)
-    //     player.isHost = false;
+    // const players = state.players;
+    // // if (players.keys.length > 1)
+    // //     player.isHost = false;
 
-    players.keys.length > 1 ? player.isHost = false : '';
+    // // players.keys.length > 1 ? player.isHost = false : '';
 
     const meta = socketMap.get(ws);
     if (meta) meta.roomId = normalizedRoomId;

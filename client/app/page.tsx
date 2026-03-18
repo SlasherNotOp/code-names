@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Plus, LogIn, Grid3x3, Sparkles, Zap, Shield, Copy, Check } from 'lucide-react';
-import { getIdentity, setPlayerName, getStoredRoom, setStoredRoom } from '@/lib/identity';
+import { getIdentity, setPlayerName, getStoredRoom, setStoredRoom, clearIdentity } from '@/lib/identity';
 import { socketClient } from '@/lib/socket';
 
 export default function LobbyPage() {
@@ -47,7 +47,12 @@ export default function LobbyPage() {
             });
 
             socketClient.on('ERROR', (data: any) => {
-                setError(data.message);
+                if (data.message === 'Invalid or missing authentication token') {
+                    clearIdentity();
+                    setError('Your session has expired. Please try again.');
+                } else {
+                    setError(data.message);
+                }
                 setLoading(false);
             });
 
@@ -85,7 +90,12 @@ export default function LobbyPage() {
             });
 
             socketClient.on('ERROR', (data: any) => {
-                setError(data.message);
+                if (data.message === 'Invalid or missing authentication token') {
+                    clearIdentity();
+                    setError('Your session has expired. Please try again.');
+                } else {
+                    setError(data.message);
+                }
                 setLoading(false);
             });
 

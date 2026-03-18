@@ -17,14 +17,14 @@ export interface Identity {
 
 /**
  * Get or create anonymous player identity.
- * Generates a new identity from the server if none exists.
+ * Generates a new identity from the server if none exists or if forceRefresh is true.
  */
-export async function getIdentity(): Promise<Identity> {
+export async function getIdentity(forceRefresh: boolean = false): Promise<Identity> {
     const existingId = localStorage.getItem(PLAYER_ID_KEY);
     const existingToken = localStorage.getItem(PLAYER_TOKEN_KEY);
     const existingName = localStorage.getItem(PLAYER_NAME_KEY);
 
-    if (existingId && existingToken && existingName) {
+    if (!forceRefresh && existingId && existingToken && existingName) {
         return { playerId: existingId, token: existingToken, playerName: existingName };
     }
 
@@ -32,13 +32,22 @@ export async function getIdentity(): Promise<Identity> {
     const res = await fetch(`${SERVER_URL}/auth/anonymous`, { method: 'POST' });
     const data = await res.json();
 
-    const name = generateDisplayName();
+    const name = existingName || generateDisplayName();
 
     localStorage.setItem(PLAYER_ID_KEY, data.playerId);
     localStorage.setItem(PLAYER_TOKEN_KEY, data.token);
     localStorage.setItem(PLAYER_NAME_KEY, name);
 
     return { playerId: data.playerId, token: data.token, playerName: name };
+}
+
+/**
+ * Clear stored identity
+ */
+export function clearIdentity(): void {
+    localStorage.removeItem(PLAYER_ID_KEY);
+    localStorage.removeItem(PLAYER_TOKEN_KEY);
+    localStorage.removeItem(PLAYER_NAME_KEY);
 }
 
 /**
